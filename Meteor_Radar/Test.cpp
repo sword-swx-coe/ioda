@@ -4,6 +4,7 @@
 #include <sstream>
 #include <string>
 #include <vector>
+#include <cmath>
 
 //#include "ioda/C/ioda_group_c.hpp"
 //#include "ioda/C/ioda_engines_c.hpp"
@@ -75,24 +76,22 @@ void readMPD(std::string file_name, float (** oupt)[7] , int max_rows, int data_
             (*oupt)[index][4] = Theta;
             (*oupt)[index][5] = Phi0;
             (*oupt)[index][6] = Ambiguity;
-            if(amb.find('.') != std::string::npos){
-                std::cout << range << "\t" << Phi0 << "\t" << Ambiguity << std::endl;
-            }
+            // if(amb.find('.') != std::string::npos){
+            //     std::cout << range << "\t" << Phi0 << "\t" << Ambiguity << std::endl;
+            // }
         };
         
     };
     file.close();
 }
 
-void alt_boundries(float* alts_boundaries, int N_alts){
-    float lower = 70;
-    float upper = 110;
+void alt_boundries(float* alts_boundaries, int N_alts, float lower, float upper){
     float Delt = upper-lower;
     float delt = Delt/N_alts;
-    for (int i = 0; i<N_alts-1; i++){
-        //std::cout << i << std::endl;
-        alts_boundaries[i]=lower+(i+1)*delt;
-        //std::cout << lower+(i+1)*delt<< std::endl;
+    alts_boundaries[0] = lower;
+    alts_boundaries[N_alts] = upper;
+    for (int i = 1; i<N_alts; i++){
+        alts_boundaries[i]=lower+(i)*delt;
     }
 }
 void swap(float (* arr)[7] , int i1, int i2){
@@ -142,31 +141,75 @@ void print_first_and_last(float (* vals)[7], int rows_max){
     std::cout << vals[i][0] << "\t" << vals[i][1] <<"\t" << vals[i][2] <<"\t" << vals[i][3] <<"\t"  << vals[i][4]<<"\t"  << vals[i][5]<<"\t"  << vals[i][6] <<std::endl;
 }
 
-
+void Get_Wind_Velo_at_Alts(float (* vals)[7],float(* Wind_Velo_at_alt)[3], float* alt_midpoints,float* alts_boundaries,int N_alts, int index_max){
+    int lower_i = 0;
+    float lower;
+    float upper;
+    float V;
+    float sigma;
+    float theta;
+    float phi;
+    float amb;
+    float den;
+    float weight;
+    float V_n;
+    float V_e;
+    float V_v;
+    for (int i = 0; i<N_alts; i++){
+        lower = alts_boundaries[i];
+        upper = alts_boundaries[i+1];
+        while(vals[lower_i][1]<lower){
+            lower_i ++;
+        }
+        weight = 0;
+        V_n = 0;
+        V_e = 0;
+        V_v = 0;
+        //std::cout << lower_i << std::endl;
+        while(lower_i<index_max && vals[lower_i][1]<upper){
+            //std::cout << vals[lower_i][1] << "\t" << upper << std::endl;
+            V = vals[lower_i][2];
+            sigma = vals[lower_i][3]*M_PI/180;
+            theta = vals[lower_i][4]*M_PI/180;
+            phi = vals[lower_i][5];
+            amb = vals[lower_i][6];
+            den = amb*sigma;
+            weight += 1;
+            V_n += V*std::sin(theta)*std::sin(phi);
+            V_e += V*std::sin(theta)*std::cos(phi);
+            V_v += V*std::cos(theta);
+            lower_i ++;
+        }
+        alt_midpoints[i] = (upper-lower)/2+lower;
+        Wind_Velo_at_alt[i][0] = V_n/weight;
+        Wind_Velo_at_alt[i][1] = V_e/weight;
+        Wind_Velo_at_alt[i][2] = V_v/weight;
+    }
+}
 int main(){
     // ==================== definitions ====================
-    int N_alts = 4;
+    int N_alts = 5;
     int data_start = 30;
+    float lower = 70;
+    float upper = 110;
     
     int rows_max = maxrowsMPD("mp20230106.riogrande.mpd");// get the number of rows in the file 
     int index_max = rows_max - data_start;// define maximum index for data 
 
     // ==================== allocations ====================
     float (*vals)[7] = (float (*)[7])malloc(sizeof(float[rows_max][7]));// allocate data array
-    float alts_boundaries[N_alts-1]; // allocate altidude boundary array
-
+    float alts_boundaries[N_alts+1]; // allocate altidude boundary array
+    float Wind_Velo_at_alt[N_alts][3];
+    float alt_midpoints[N_alts];
     // ==================== main body ====================
     readMPD("mp20230106.riogrande.mpd",&vals,rows_max, data_start);//get data from file 
-    std::cout << "==================" << std::endl;
-    print_first_and_last(vals, rows_max);
-    alt_boundries(alts_boundaries,N_alts);// find the boundary altitudes 
-    
-    quickSort(vals,  0, index_max);
-    std::cout << "==================" << std::endl;
-    print_first_and_last(vals, rows_max);
-
-    
-
+    alt_boundries(alts_boundaries,N_alts,lower,upper);// find the boundary altitudes 
+    quickSort(vals,  0, index_max);// sort data by height 
+    Get_Wind_Velo_at_Alts(vals,Wind_Velo_at_alt,alt_midpoints,alts_boundaries,N_alts,index_max );
+    std::cout << "alt-midpoin(km),   V_n \t \t V_e \t\t V_v "  << std::endl;
+    for (int i = 0; i<N_alts; i++){
+        std::cout << "\t"  << alt_midpoints[i]<< "\t" << Wind_Velo_at_alt[i][0] << "  \t" << Wind_Velo_at_alt[i][1] << "  \t" << Wind_Velo_at_alt[i][2]  << std::endl;
+    }
     free(vals);
     return(0);
 }
