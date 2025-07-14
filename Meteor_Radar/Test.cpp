@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 #include <cmath>
-
+#include <fstream> 
 //#include "ioda/C/ioda_group_c.hpp"
 //#include "ioda/C/ioda_engines_c.hpp"
 //#include "ioda/C/ioda_vecstring_c.hpp"
@@ -186,14 +186,14 @@ void Get_Wind_Velo_at_Alts(float (* vals)[7],float(* Wind_Velo_at_alt)[3], float
         Wind_Velo_at_alt[i][2] = V_v/weight;
     }
 }
-int main(){
-    // ==================== definitions ====================
-    int N_alts = 5;
+void main_helper(std::string day){
+    int N_alts = 100;
     int data_start = 30;
     float lower = 70;
     float upper = 110;
-    
-    int rows_max = maxrowsMPD("mp20230106.riogrande.mpd");// get the number of rows in the file 
+    std::string datafile = "mp202301" + day + ".riogrande.mpd";
+    std::string outputfile = "mp202301" + day + ".oupt";
+    int rows_max = maxrowsMPD(datafile );// get the number of rows in the file 
     int index_max = rows_max - data_start;// define maximum index for data 
 
     // ==================== allocations ====================
@@ -202,14 +202,31 @@ int main(){
     float Wind_Velo_at_alt[N_alts][3];
     float alt_midpoints[N_alts];
     // ==================== main body ====================
-    readMPD("mp20230106.riogrande.mpd",&vals,rows_max, data_start);//get data from file 
+    std::ofstream outputFile(outputfile);
+    readMPD(datafile ,&vals,rows_max, data_start);//get data from file 
     alt_boundries(alts_boundaries,N_alts,lower,upper);// find the boundary altitudes 
     quickSort(vals,  0, index_max);// sort data by height 
     Get_Wind_Velo_at_Alts(vals,Wind_Velo_at_alt,alt_midpoints,alts_boundaries,N_alts,index_max );
     std::cout << "alt-midpoin(km),   V_n \t \t V_e \t\t V_v "  << std::endl;
+    outputFile << "alt-midpoin(km),   V_n \t \t V_e \t\t V_v "  << std::endl;
     for (int i = 0; i<N_alts; i++){
         std::cout << "\t"  << alt_midpoints[i]<< "\t" << Wind_Velo_at_alt[i][0] << "  \t" << Wind_Velo_at_alt[i][1] << "  \t" << Wind_Velo_at_alt[i][2]  << std::endl;
+        outputFile << "\t"  << alt_midpoints[i]<< "\t" << Wind_Velo_at_alt[i][0] << "  \t" << Wind_Velo_at_alt[i][1] << "  \t" << Wind_Velo_at_alt[i][2]  << std::endl;
     }
+    outputFile.close();
     free(vals);
+}
+int main(){
+    // ==================== definitions ====================
+    std::string day = "06";
+    main_helper(day);
+    day = "07";
+    main_helper(day);
+     day = "08";
+    main_helper(day);
+    day = "09";
+    main_helper(day);
+    day = "10";
+    main_helper(day);
     return(0);
 }
